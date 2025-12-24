@@ -1,0 +1,19 @@
+# Binaries
+devscope
+devscope.exe
+
+# Output directory
+.devscope/
+
+# Test data
+test_data/
+
+# OS specific
+.DS_Store
+Thumbs.db
+*.swp
+
+# Editor specific
+.vscode/
+.idea/
+*.iml
