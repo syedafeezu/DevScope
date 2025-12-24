@@ -72,12 +72,6 @@ func runSearch(args []string) {
 	}
 	defer idxReader.Close()
 
-	fmt.Printf("Loaded %d documents.\n", idxReader.TotalDocs)
-	// Debug print docs
-	for id, d := range idxReader.Docs {
-		fmt.Printf("Doc %d: %s\n", id, d.Path)
-	}
-
 	start := time.Now()
 	results, err := query.Search(idxReader, queryStr)
 	if err != nil {

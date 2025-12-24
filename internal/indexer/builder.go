@@ -138,8 +138,8 @@ func (b *IndexBuilder) save() error {
 	var indexOffset uint64 = 0 // Relative to postings start (after header)?
 	// Plan said: "Offset -> Points to start of postings in index.bin"
 	// So it should include header size.
-	// Header size = 8 + 1 = 9 bytes.
-	indexOffset = 9
+	// Header size = 12 ("DEVSCOPE_IDX") + 1 (Version) = 13 bytes.
+	indexOffset = 13
 
 	// Buffer for writing integers
 	buf := make([]byte, 8)

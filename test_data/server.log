@@ -1,0 +1,6 @@
+2025-12-21T08:00:00 INFO Server starting on port 8080
+2025-12-21T08:00:05 INFO DB connection established
+2025-12-21T08:45:12 WARN High memory usage detected: 85%
+2025-12-21T09:00:00 ERROR Database query timeout (5000ms)
+2025-12-21T09:00:01 INFO Retrying connection...
+2025-12-21T09:00:05 INFO Connection restored
