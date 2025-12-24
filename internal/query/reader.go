@@ -135,8 +135,6 @@ func (r *IndexReader) loadDocsUsingStore(path string) error {
 			return err
 		}
 
-		fmt.Printf("Debug: DocID=%d PathLen=%d\n", docID, pathLen)
-
 		// Path
 		pathBytes := make([]byte, pathLen)
 		if _, err := io.ReadFull(bufReader, pathBytes); err != nil {
