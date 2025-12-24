@@ -82,7 +82,7 @@ func runSearch(args []string) {
 
 	fmt.Printf("Found %d results in %v:\n", len(results), duration)
 	for i, res := range results {
-		fmt.Printf("%d. %s (Line: %d, Score: %.2f)\n", i+1, res.Path, res.LineNum, res.Score)
+		fmt.Printf("%d. %s (Line: %d, Score: %.2f, Matches: %d)\n", i+1, res.Path, res.LineNum, res.Score, res.MatchCount)
 		fmt.Printf("   %s\n\n", res.Snippet)
 	}
 }

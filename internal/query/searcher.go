@@ -10,11 +10,12 @@ import (
 )
 
 type SearchResult struct {
-	DocID   uint32
-	Path    string
-	Score   float64
-	Snippet string
-	LineNum uint32
+	DocID      uint32
+	Path       string
+	Score      float64
+	Snippet    string
+	LineNum    uint32
+	MatchCount uint32
 }
 
 // main search function that coordinates everything
@@ -26,7 +27,8 @@ func Search(idx *IndexReader, queryString string) ([]SearchResult, error) {
 	}
 
 	scores := make(map[uint32]float64)
-	docMatches := make(map[uint32]int) // tracks how many terms/phrases matched per doc
+	totalFreqs := make(map[uint32]uint32) // tracks total occurrences of terms/phrases
+	docMatches := make(map[uint32]int)    // tracks how many terms/phrases matched per doc
 	totalRequirements := len(terms) + len(phrases)
 
 	// 1. Process Single Terms
@@ -42,13 +44,11 @@ func Search(idx *IndexReader, queryString string) ([]SearchResult, error) {
 		lexEntry := idx.Lexicon[term]
 		idf := math.Log(float64(idx.TotalDocs) / (float64(lexEntry.DocFreq) + 1))
 
-		processPostings(postings, idx.Docs, idf, scores, docMatches, levelFilter, extFilter)
+		processPostings(postings, idx.Docs, idf, scores, docMatches, totalFreqs, levelFilter, extFilter)
 	}
 
 	// 2. Process Phrases
 	for _, phrase := range phrases {
-		// a phrase is a list of words that must appear in order
-		// first, get postings for all words
 		var phrasePostings [][]models.Posting
 		for _, word := range phrase {
 			p, err := idx.GetPostings(word)
@@ -57,7 +57,7 @@ func Search(idx *IndexReader, queryString string) ([]SearchResult, error) {
 			}
 			if p == nil {
 				phrasePostings = nil
-				break // one word missing means phrase missing
+				break
 			}
 			phrasePostings = append(phrasePostings, p)
 		}
@@ -66,30 +66,27 @@ func Search(idx *IndexReader, queryString string) ([]SearchResult, error) {
 			continue
 		}
 
-		// intersection logic
-		matchedDocs := matchPhraseDocs(phrasePostings)
+		// intersection logic now returns counts
+		matchedCounts := matchPhraseDocs(phrasePostings)
 
-		// calculating idf for phrase is complex, lets just sum idfs of words
 		var phraseIdf float64
 		for _, word := range phrase {
 			lexEntry := idx.Lexicon[word]
 			phraseIdf += math.Log(float64(idx.TotalDocs) / (float64(lexEntry.DocFreq) + 1))
 		}
 
-		// add scores for matched docs
-		for docID := range matchedDocs {
+		for docID, count := range matchedCounts {
 			doc := idx.Docs[docID]
-			// check filters again (redundant but safe)
 			if extFilter != "" && !strings.HasSuffix(strings.ToLower(doc.Path), extFilter) {
 				continue
 			}
-			// level filter mainly for logs, phrase search usually for code but lets support it
-			// we assume if phrase exists in doc, it passes unless specific line check needed (skipped for now)
 
-			// tf = 1 for phrase (simplification)
-			score := 1.0 * phraseIdf * 2.0 // bonus for phrase
+			// use actual phrase count for scoring
+			tf := float64(count)
+			score := tf * phraseIdf * 2.0 // bonus for phrase
 
 			scores[docID] += score
+			totalFreqs[docID] += count
 			docMatches[docID]++
 		}
 	}
@@ -100,9 +97,10 @@ func Search(idx *IndexReader, queryString string) ([]SearchResult, error) {
 		if count == totalRequirements {
 			doc := idx.Docs[docID]
 			res := SearchResult{
-				DocID: docID,
-				Path:  doc.Path,
-				Score: scores[docID],
+				DocID:      docID,
+				Path:       doc.Path,
+				Score:      scores[docID],
+				MatchCount: totalFreqs[docID],
 			}
 			results = append(results, res)
 		}
@@ -113,6 +111,7 @@ func Search(idx *IndexReader, queryString string) ([]SearchResult, error) {
 		return results[i].Score > results[j].Score
 	})
 
+	// limit results to top 10
 	if len(results) > 10 {
 		results = results[:10]
 	}
@@ -132,7 +131,7 @@ func Search(idx *IndexReader, queryString string) ([]SearchResult, error) {
 	return results, nil
 }
 
-func processPostings(postings []models.Posting, docs map[uint32]models.DocumentRecord, idf float64, scores map[uint32]float64, docMatches map[uint32]int, levelFilter, extFilter string) {
+func processPostings(postings []models.Posting, docs map[uint32]models.DocumentRecord, idf float64, scores map[uint32]float64, docMatches map[uint32]int, totalFreqs map[uint32]uint32, levelFilter, extFilter string) {
 	for _, p := range postings {
 		doc := docs[p.DocID]
 
@@ -161,14 +160,14 @@ func processPostings(postings []models.Posting, docs map[uint32]models.DocumentR
 		}
 
 		scores[p.DocID] += score
+		totalFreqs[p.DocID] += p.Frequency
 		docMatches[p.DocID]++
 	}
 }
 
-func matchPhraseDocs(postingsList [][]models.Posting) map[uint32]bool {
+func matchPhraseDocs(postingsList [][]models.Posting) map[uint32]uint32 {
 	// Start with docIDs from the first word
-	// Using map for quick lookup
-	candidates := make(map[uint32][]uint32) // docID -> positions of first word matches
+	candidates := make(map[uint32][]uint32) // docID -> positions of match chain
 
 	firstList := postingsList[0]
 	for _, p := range firstList {
@@ -188,7 +187,6 @@ func matchPhraseDocs(postingsList [][]models.Posting) map[uint32]bool {
 			}
 
 			// check positional adjacency
-			// for any pos in prevPositions, is there a (pos + 1) in p.Positions?
 			var validNewPositions []uint32
 			for _, prevPos := range prevPositions {
 				for _, currPos := range p.Positions {
@@ -209,11 +207,12 @@ func matchPhraseDocs(postingsList [][]models.Posting) map[uint32]bool {
 		}
 	}
 
-	finalDocs := make(map[uint32]bool)
-	for id := range candidates {
-		finalDocs[id] = true
+	// convert valid candidates to frequency counts
+	finalCounts := make(map[uint32]uint32)
+	for id, positions := range candidates {
+		finalCounts[id] = uint32(len(positions))
 	}
-	return finalDocs
+	return finalCounts
 }
 
 func parseQuery(q string) (terms []string, phrases [][]string, level, ext string) {

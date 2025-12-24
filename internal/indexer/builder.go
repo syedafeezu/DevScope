@@ -4,12 +4,17 @@ import (
 	"encoding/binary"
 	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"devscope/internal/store"
 	"devscope/pkg/models"
 )
+
+var reFileNameToken = regexp.MustCompile(`[a-zA-Z0-9_]+`)
 
 type IndexBuilder struct {
 	DocsPath    string
@@ -66,6 +71,20 @@ func (b *IndexBuilder) Build(root string) error {
 		// put tokens in memory map for now
 		for _, tok := range tokens {
 			b.addToken(tok, doc.DocID)
+		}
+
+		// ALSO index the filename itself for the +5.0 bonus!
+		baseName := filepath.Base(doc.Path)
+		// remove extension for cleaner tokens? "main.cpp" -> "main", "cpp"
+		// simple regex find all works nicely
+		fnTokens := reFileNameToken.FindAllString(baseName, -1)
+		for _, term := range fnTokens {
+			// add with MetaInFileName, position 0 (header)
+			b.addToken(RawToken{
+				Term:     strings.ToLower(term),
+				Position: 0,
+				Meta:     MetaInFileName, // Same package constant
+			}, doc.DocID)
 		}
 
 		if count%100 == 0 {

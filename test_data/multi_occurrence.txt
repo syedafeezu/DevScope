@@ -1,0 +1,4 @@
+This file has the word apple.
+It also has apple again.
+And a third apple here.
+human-like comment about apples.

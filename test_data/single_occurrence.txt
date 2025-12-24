@@ -1,0 +1,3 @@
+This file has the word apple just once.
+No more fruit here.
+human-like comment.

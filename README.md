@@ -92,4 +92,4 @@ go build ./cmd/devscope
 *   **index.bin**: `[DocID:4][Freq:4][Meta:1][PosCount:4][Positions:4*N]...`
 
 ## 🤝 Contributing
-Built for the [Competition Name]. Focuses on understanding core search engine mechanics without reliance on external indexing libraries.
+Built for the Rootsprout's Build from Scratch Hackathon. Focuses on understanding core search engine mechanics without reliance on external indexing libraries.
