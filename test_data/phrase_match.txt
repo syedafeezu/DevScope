@@ -1,0 +1,2 @@
+This file contains hello world in exact sequence.
+It should be found by "hello world" search.

@@ -11,13 +11,11 @@ import (
 	"devscope/pkg/models"
 )
 
-// IndexBuilder orchestrates the indexing process
 type IndexBuilder struct {
 	DocsPath    string
 	IndexPath   string
 	LexiconPath string
 
-	// term -> docID -> Pointer to Posting
 	memIndex map[string]map[uint32]*models.Posting
 }
 
@@ -30,18 +28,16 @@ func NewIndexBuilder(outDir string) *IndexBuilder {
 	}
 }
 
-// Build runs the full indexing pipeline
+// this does everything: crawl, tokenize, save
 func (b *IndexBuilder) Build(root string) error {
 	start := time.Now()
 
-	// 1. Setup Docs Writer
 	docWriter, err := store.NewDocWriter(b.DocsPath)
 	if err != nil {
 		return fmt.Errorf("failed to open docs file: %w", err)
 	}
 	defer docWriter.Close()
 
-	// 2. Crawl
 	crawler := NewCrawler(root)
 	docsChan := make(chan models.DocumentRecord)
 
@@ -51,7 +47,6 @@ func (b *IndexBuilder) Build(root string) error {
 	for doc := range docsChan {
 		count++
 
-		// 3. Tokenize
 		file, err := os.Open(doc.Path)
 		if err != nil {
 			fmt.Printf("Warn: could not open %s: %v\n", doc.Path, err)
@@ -61,16 +56,14 @@ func (b *IndexBuilder) Build(root string) error {
 		tokens, minT, maxT := Tokenize(file, doc.Type)
 		file.Close()
 
-		// Update doc metadata with timestamps if needed
 		doc.TimestampMin = minT
 		doc.TimestampMax = maxT
 
-		// Write to docs.bin
 		if err := docWriter.Write(doc); err != nil {
 			return fmt.Errorf("failed to write doc: %w", err)
 		}
 
-		// 4. Update In-Memory Index
+		// put tokens in memory map for now
 		for _, tok := range tokens {
 			b.addToken(tok, doc.DocID)
 		}
@@ -81,7 +74,6 @@ func (b *IndexBuilder) Build(root string) error {
 	}
 	fmt.Printf("\nFinished core indexing of %d files in %v. Sorting and writing index...\n", count, time.Since(start))
 
-	// 5. Write Index & Lexicon
 	return b.save()
 }
 
@@ -106,6 +98,7 @@ func (b *IndexBuilder) addToken(tok RawToken, docID uint32) {
 	post.Meta |= tok.Meta
 }
 
+// save everything to disk in binary format
 func (b *IndexBuilder) save() error {
 	idxFile, err := os.Create(b.IndexPath)
 	if err != nil {
@@ -113,9 +106,6 @@ func (b *IndexBuilder) save() error {
 	}
 	defer idxFile.Close()
 
-	// Prepare Header (DEVSCOPE_IDX / LEX) - Keeping it simple for now or matching plan?
-	// Plan said Header: DEVSCOPE_IDX (8 bytes) + Version (1 byte)
-	// I'll add headers here to match plan strictly.
 	idxFile.WriteString("DEVSCOPE_IDX")
 	idxFile.Write([]byte{1})
 
@@ -128,26 +118,20 @@ func (b *IndexBuilder) save() error {
 	lexFile.WriteString("DEVSCOPE_LEX")
 	lexFile.Write([]byte{1})
 
-	// Sort terms
+	// sort terms so we can search faster later maybe?
 	terms := make([]string, 0, len(b.memIndex))
 	for t := range b.memIndex {
 		terms = append(terms, t)
 	}
 	sort.Strings(terms)
 
-	var indexOffset uint64 = 0 // Relative to postings start (after header)?
-	// Plan said: "Offset -> Points to start of postings in index.bin"
-	// So it should include header size.
-	// Header size = 12 ("DEVSCOPE_IDX") + 1 (Version) = 13 bytes.
-	indexOffset = 13
-
-	// Buffer for writing integers
+	var indexOffset uint64 = 13 // start after idx header
 	buf := make([]byte, 8)
 
 	for _, term := range terms {
 		docMap := b.memIndex[term]
 
-		// Sort postings by DocID
+		// sort by docID for delta encoding later if we want
 		postings := make([]*models.Posting, 0, len(docMap))
 		for _, p := range docMap {
 			postings = append(postings, p)
@@ -158,41 +142,30 @@ func (b *IndexBuilder) save() error {
 
 		startOffset := indexOffset
 
-		// Write postings to index.bin
+		// write each posting
 		for _, p := range postings {
-			// Write DocID (4)
 			binary.LittleEndian.PutUint32(buf, p.DocID)
 			idxFile.Write(buf[:4])
 
-			// Write Freq (4)
 			binary.LittleEndian.PutUint32(buf, p.Frequency)
 			idxFile.Write(buf[:4])
 
-			// Write Meta (1)
 			idxFile.Write([]byte{p.Meta})
 
-			// Write Positions Count (4)
 			binary.LittleEndian.PutUint32(buf, uint32(len(p.Positions)))
 			idxFile.Write(buf[:4])
 
-			// Write Positions (4 * Count)
 			for _, pos := range p.Positions {
 				binary.LittleEndian.PutUint32(buf, pos)
 				idxFile.Write(buf[:4])
 			}
 
-			// Update offset: 4+4+1+4 + 4*len
 			indexOffset += uint64(13 + 4*len(p.Positions))
 		}
 
-		// Calculate chunk length
 		postingListLen := indexOffset - startOffset
 
-		// Write Lexicon Entry
-		// Record: TermLen (2) + Term + DocFreq (4) + Offset (8) + Length (4)
-		// Updated to match implementation plan.
-		// NOTE: implementation plan said TermLen is uint16. My prev code had uint8. I'll use uint16.
-
+		// write lexicon entry
 		termBytes := []byte(term)
 		if len(termBytes) > 65535 {
 			termBytes = termBytes[:65535]
@@ -203,13 +176,13 @@ func (b *IndexBuilder) save() error {
 
 		lexFile.Write(termBytes)
 
-		binary.LittleEndian.PutUint32(buf, uint32(len(postings))) // DocFreq
+		binary.LittleEndian.PutUint32(buf, uint32(len(postings)))
 		lexFile.Write(buf[:4])
 
 		binary.LittleEndian.PutUint64(buf, startOffset)
 		lexFile.Write(buf[:8])
 
-		binary.LittleEndian.PutUint32(buf, uint32(postingListLen)) // Length of posting list logic
+		binary.LittleEndian.PutUint32(buf, uint32(postingListLen))
 		lexFile.Write(buf[:4])
 	}
 

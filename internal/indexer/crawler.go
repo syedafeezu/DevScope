@@ -16,18 +16,19 @@ func NewCrawler(root string) *Crawler {
 	return &Crawler{Root: root}
 }
 
-// Crawl walks the directory and sends DocumentRecords to the channel.
-// It assigns DocID incremently starting from 1.
+// this function walks thru all files recursively
 func (c *Crawler) Crawl(out chan<- models.DocumentRecord) error {
 	defer close(out)
-	
+
 	docIDCounter := uint32(1)
 
+	// start walkin directory
 	return filepath.WalkDir(c.Root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil // Skip unreadable files
+			return nil // just skip bad files
 		}
 		if d.IsDir() {
+			// ignore useless directores
 			if d.Name() == ".git" || d.Name() == "node_modules" || d.Name() == "vendor" {
 				return filepath.SkipDir
 			}
@@ -36,7 +37,7 @@ func (c *Crawler) Crawl(out chan<- models.DocumentRecord) error {
 
 		docType := determineType(path)
 		if docType == -1 {
-			return nil // Skip unknown types
+			return nil // we dont know this file type
 		}
 
 		rec := models.DocumentRecord{
@@ -44,20 +45,19 @@ func (c *Crawler) Crawl(out chan<- models.DocumentRecord) error {
 			Type:  models.DocType(docType),
 			Path:  path,
 		}
-		
+
 		out <- rec
 		docIDCounter++
 		return nil
 	})
 }
 
+// checks extension to see what kind of file it is
 func determineType(path string) int {
 	ext := strings.ToLower(filepath.Ext(path))
 	switch ext {
-	// Code
 	case ".go", ".py", ".js", ".ts", ".c", ".cpp", ".h", ".hpp", ".java", ".rs", ".md", ".txt", ".json", ".yaml", ".yml":
 		return int(models.DocTypeCode)
-	// Log
 	case ".log":
 		return int(models.DocTypeLog)
 	}

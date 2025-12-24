@@ -1,6 +1,6 @@
 package models
 
-// DocType distinguishes between source code and log files.
+// this helps us know if its a log or just code
 type DocType uint8
 
 const (
@@ -8,28 +8,28 @@ const (
 	DocTypeLog  DocType = 1
 )
 
-// DocumentRecord represents the metadata stored for each file in docs.bin.
+// this struct holds the info for each file
 type DocumentRecord struct {
 	DocID        uint32
 	Type         DocType
 	Path         string
-	TimestampMin int64 // For logs: epoch start. For code: ModTime.
-	TimestampMax int64 // For logs: epoch end. For code: 0 or ModTime.
+	TimestampMin int64 // start time if its a log
+	TimestampMax int64 // end time if its a log
 }
 
-// Posting represents a single hit in the index.
+// this is one item in the search result list
 type Posting struct {
 	DocID     uint32
 	Frequency uint32
 	Positions []uint32
-	Meta      uint8 // e.g. bitmask: 0x1=in_filename, 0x2=in_function, 0x4=is_error_log
+	Meta      uint8 // extra info like if its inside a functon
 }
 
-// LexiconEntry represents a term in lexicon.bin (in-memory representation)
+// this is for looking up words in the index
 type LexiconEntry struct {
 	Term         string
 	DocFreq      uint32
-	Offset       uint64 // Offset in index.bin
+	Offset       uint64 // where to jump in the file
 	PostingCount uint32
 }
 
