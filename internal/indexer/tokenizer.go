@@ -10,10 +10,10 @@ import (
 	"devscope/pkg/models"
 )
 
-// RawToken is an intermediate token before indexing
+// raw token before we process it fully
 type RawToken struct {
 	Term     string
-	Position uint32 // Line number for now, or token index
+	Position uint32
 	Meta     uint8
 }
 
@@ -25,8 +25,7 @@ const (
 	MetaLogLevelWarn   = 1 << 3
 )
 
-// Tokenize processes a file and returns a slice of tokens.
-// It also returns min/max timestamps for logs.
+// helper to decide which tokenizer function to use
 func Tokenize(reader io.Reader, docType models.DocType) ([]RawToken, int64, int64) {
 	if docType == models.DocTypeLog {
 		return tokenizeLog(reader)
@@ -42,19 +41,17 @@ var (
 func tokenizeCode(reader io.Reader) []RawToken {
 	scanner := bufio.NewScanner(reader)
 	var tokens []RawToken
-	lineNum := uint32(1)
+	tokenCounter := uint32(0)
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Check for function definitions
 		matches := reFuncDef.FindStringSubmatch(line)
 		funcName := ""
 		if len(matches) > 2 {
 			funcName = matches[2]
 		}
 
-		// Find all identifiers
 		ids := reIdentifier.FindAllStringIndex(line, -1)
 		for _, loc := range ids {
 			term := line[loc[0]:loc[1]]
@@ -63,14 +60,13 @@ func tokenizeCode(reader io.Reader) []RawToken {
 				meta |= MetaInFunctionName
 			}
 
+			tokenCounter++
 			tokens = append(tokens, RawToken{
 				Term:     strings.ToLower(term),
-				Position: lineNum, // Using line number as position for snippet retrieval
+				Position: tokenCounter,
 				Meta:     meta,
 			})
 		}
-
-		lineNum++
 	}
 	return tokens
 }
@@ -78,16 +74,12 @@ func tokenizeCode(reader io.Reader) []RawToken {
 func tokenizeLog(reader io.Reader) ([]RawToken, int64, int64) {
 	scanner := bufio.NewScanner(reader)
 	var tokens []RawToken
-	lineNum := uint32(1)
+	tokenCounter := uint32(0)
 	var minTime, maxTime int64
-
-	// Regex for basic ISO-ish timestamps: 2025-12-20T10:00:00 or 2025-12-20 10:00:00
-	// Crude but fast approach: Look for digits and dashes/colons at start
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Parse timestamp
 		ts := parseTimestamp(line)
 		if ts > 0 {
 			if minTime == 0 || ts < minTime {
@@ -98,7 +90,6 @@ func tokenizeLog(reader io.Reader) ([]RawToken, int64, int64) {
 			}
 		}
 
-		// Parse Level
 		meta := uint8(MetaNone)
 		upperLine := strings.ToUpper(line)
 		if strings.Contains(upperLine, "ERROR") {
@@ -107,32 +98,28 @@ func tokenizeLog(reader io.Reader) ([]RawToken, int64, int64) {
 			meta |= MetaLogLevelWarn
 		}
 
-		// Tokenize message
 		ids := reIdentifier.FindAllString(line, -1)
 		for _, term := range ids {
+			tokenCounter++
 			tokens = append(tokens, RawToken{
 				Term:     strings.ToLower(term),
-				Position: lineNum,
+				Position: tokenCounter,
 				Meta:     meta,
 			})
 		}
-
-		lineNum++
 	}
 	return tokens, minTime, maxTime
 }
 
 func parseTimestamp(line string) int64 {
-	// Try to find something that looks like a date
-	// Very simple heuristic: first 19 chars
+	// we need at least some chars to make a date
 	if len(line) < 19 {
 		return 0
 	}
-	// "2006-01-02T15:04:05"
 	chunk := line[:19]
-	// Replace space with T for standard parsing if needed
 	chunkT := strings.Replace(chunk, " ", "T", 1)
 
+	// parsing iso format date
 	t, err := time.Parse("2006-01-02T15:04:05", chunkT)
 	if err == nil {
 		return t.Unix()

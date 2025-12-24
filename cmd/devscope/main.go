@@ -36,9 +36,8 @@ func runIndex(args []string) {
 	}
 
 	root := args[0]
-	// Output index files to current directory or .devscope subdir?
-	// For now, let's output to .devscope directory in current working dir
 	outDir := ".devscope"
+	// make output dir if it dont exist
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		fmt.Printf("Failed to create output directory: %v\n", err)
 		os.Exit(1)
@@ -64,7 +63,7 @@ func runSearch(args []string) {
 	queryStr := strings.Join(args, " ")
 	outDir := ".devscope"
 
-	// Open Index
+	// open the index so we can search it
 	idxReader, err := query.NewIndexReader(outDir)
 	if err != nil {
 		fmt.Printf("Failed to open index: %v\n", err)

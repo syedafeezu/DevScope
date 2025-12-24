@@ -9,6 +9,7 @@ import (
 	"os"
 )
 
+// helping us read the index files
 type IndexReader struct {
 	Docs      map[uint32]models.DocumentRecord
 	Lexicon   map[string]models.LexiconEntry
@@ -22,31 +23,31 @@ func NewIndexReader(dir string) (*IndexReader, error) {
 		Lexicon: make(map[string]models.LexiconEntry),
 	}
 
-	// Load Docs
+	// first we load docs meta data
 	if err := reader.loadDocs(dir + "/" + models.DocsFileName); err != nil {
-		return nil, fmt.Errorf("loading docs: %w", err)
+		return nil, fmt.Errorf("loading docs failed: %w", err)
 	}
 
-	// Load Lexicon
+	// then we load the dictionary (lexicon)
 	if err := reader.loadLexicon(dir + "/" + models.LexiconFileName); err != nil {
-		return nil, fmt.Errorf("loading lexicon: %w", err)
+		return nil, fmt.Errorf("loading lexicon failed: %w", err)
 	}
 
-	// Open Index
+	// open the big index file
 	f, err := os.Open(dir + "/" + models.IndexFileName)
 	if err != nil {
-		return nil, fmt.Errorf("opening index: %w", err)
+		return nil, fmt.Errorf("opening index failed: %w", err)
 	}
 
-	// Verify Index Header
-	header := make([]byte, 13) // "DEVSCOPE_IDX" (12) + Ver(1)
+	// make sure header is valid
+	header := make([]byte, 13)
 	if _, err := io.ReadFull(f, header); err != nil {
 		f.Close()
 		return nil, err
 	}
 	if string(header[:12]) != "DEVSCOPE_IDX" {
 		f.Close()
-		return nil, fmt.Errorf("invalid index header")
+		return nil, fmt.Errorf("invalid header index")
 	}
 
 	reader.File = f
@@ -55,38 +56,15 @@ func NewIndexReader(dir string) (*IndexReader, error) {
 
 func (r *IndexReader) Close() {
 	if r.File != nil {
-		r.File.Close()
+		r.File.Close() // dont forget to close file handle
 	}
 }
 
 func (r *IndexReader) loadDocs(path string) error {
-	// Re-implemented using internal/store code or just use store.DocReader?
-	// We didn't export NewDocReader in store properly or we defined it in docs_io.go which is in store package.
-	// So we can use store.NewDocReader.
-	// But reader.go relies on `devscope/internal/store`.
-	// I should update imports to use `devscope/internal/store`.
-	// But `store.DocReader` returns `models.DocumentRecord`.
-
-	// Wait, I can only import `devscope/internal/store` if I update imports.
-	// I'll assume I can add the import.
-	// Actually I will reimplement reading here to avoid cross-layer dependency if unnecessary,
-	// OR better, reuse `store.DocReader` which I spent time implementing.
-	// I'll update imports to include `devscope/internal/store`.
 	return r.loadDocsUsingStore(path)
 }
 
-// Helper to avoid import cycles / cleaner usage if possible. But cycle is query -> store. store -> models. models -> none. No cycle.
-// I will add the import `devscope/internal/store` in the replace block.
-
 func (r *IndexReader) loadDocsUsingStore(path string) error {
-	// I need to import store. But I can't put import mid-file.
-	// I'll manually implement for now to avoid complexity of editing imports again if I mess up.
-	// Actually, I already imported `devscope/pkg/models`.
-	// I will just reimplement the read logic since it's simple enough and I want to be sure it matches.
-	// Actually, `docs_io.go` has header verification. I should really use it.
-
-	// Let's rely on manual reading as previously implemented but with corrected headers/types.
-
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -95,53 +73,48 @@ func (r *IndexReader) loadDocsUsingStore(path string) error {
 
 	bufReader := bufio.NewReader(f)
 
-	// Verify Header
 	const headerStr = "DEVSCOPE_DOCS"
 	header := make([]byte, len(headerStr))
 	if _, err := io.ReadFull(bufReader, header); err != nil {
 		return err
 	}
 	if string(header) != headerStr {
-		return fmt.Errorf("invalid docs header")
+		return fmt.Errorf("bad headers docs")
 	}
 	ver, err := bufReader.ReadByte()
 	if err != nil {
 		return err
 	}
 	if ver != 1 {
-		return fmt.Errorf("bad version")
+		return fmt.Errorf("bad ver")
 	}
 
+	// looping thru all docs
 	for {
-		// Read DocID (4)
 		var docID uint32
 		if err := binary.Read(bufReader, binary.LittleEndian, &docID); err != nil {
 			if err == io.EOF {
-				break
+				break // done reading
 			}
 			return err
 		}
 
-		// Type (1)
 		b, err := bufReader.ReadByte()
 		if err != nil {
 			return err
 		}
 		docType := models.DocType(b)
 
-		// PathLen (2)
 		var pathLen uint16
 		if err := binary.Read(bufReader, binary.LittleEndian, &pathLen); err != nil {
 			return err
 		}
 
-		// Path
 		pathBytes := make([]byte, pathLen)
 		if _, err := io.ReadFull(bufReader, pathBytes); err != nil {
 			return err
 		}
 
-		// Timestamps (8+8)
 		var tMin, tMax int64
 		if err := binary.Read(bufReader, binary.LittleEndian, &tMin); err != nil {
 			return err
@@ -171,20 +144,18 @@ func (r *IndexReader) loadLexicon(path string) error {
 	defer f.Close()
 	reader := bufio.NewReader(f)
 
-	// Verify Header "DEVSCOPE_LEX"
 	header := make([]byte, 12)
 	if _, err := io.ReadFull(reader, header); err != nil {
 		return err
 	}
 	if string(header) != "DEVSCOPE_LEX" {
-		return fmt.Errorf("bad lexicon header")
+		return fmt.Errorf("bad lex header")
 	}
 	if _, err := reader.ReadByte(); err != nil {
 		return err
-	} // Version
+	}
 
 	for {
-		// TermLen (2) - Updated from 1 byte
 		var termLen uint16
 		if err := binary.Read(reader, binary.LittleEndian, &termLen); err != nil {
 			if err == io.EOF {
@@ -198,7 +169,6 @@ func (r *IndexReader) loadLexicon(path string) error {
 			return err
 		}
 
-		// DocFreq(4) + Offset(8) + Len(4) = 16 bytes
 		meta := make([]byte, 16)
 		if _, err := io.ReadFull(reader, meta); err != nil {
 			return err
@@ -208,28 +178,27 @@ func (r *IndexReader) loadLexicon(path string) error {
 			Term:         string(termBytes),
 			DocFreq:      binary.LittleEndian.Uint32(meta[0:4]),
 			Offset:       binary.LittleEndian.Uint64(meta[4:12]),
-			PostingCount: binary.LittleEndian.Uint32(meta[12:16]), // Actually byte length
+			PostingCount: binary.LittleEndian.Uint32(meta[12:16]),
 		}
 		r.Lexicon[entry.Term] = entry
 	}
 	return nil
 }
 
+// retrieves the list of docs that contain the term
 func (r *IndexReader) GetPostings(term string) ([]models.Posting, error) {
 	entry, ok := r.Lexicon[term]
 	if !ok {
-		return nil, nil
+		return nil, nil // word not found
 	}
 
+	// jump to location in file
 	if _, err := r.File.Seek(int64(entry.Offset), 0); err != nil {
 		return nil, err
 	}
 
-	// If we trusted ParsingCount as ByteLength, we could limit reading,
-	// but we can just loop DocFreq times.
-
 	postings := make([]models.Posting, 0, entry.DocFreq)
-	header := make([]byte, 13) // DocID(4)+Freq(4)+Meta(1)+PosCount(4)
+	header := make([]byte, 13)
 
 	for i := uint32(0); i < entry.DocFreq; i++ {
 		if _, err := io.ReadFull(r.File, header); err != nil {

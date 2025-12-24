@@ -14,7 +14,7 @@ const (
 	DocsVersion = 1
 )
 
-// DocWriter handles writing to docs.bin
+// writes docs to the disk
 type DocWriter struct {
 	file *os.File
 	w    *bufio.Writer
@@ -26,43 +26,38 @@ func NewDocWriter(path string) (*DocWriter, error) {
 		return nil, err
 	}
 	dw := &DocWriter{file: f, w: bufio.NewWriter(f)}
-	
-	// Write Header
+
+	// write the header so we know its our file
 	if _, err := dw.w.WriteString(DocsHeader); err != nil {
 		return nil, err
 	}
 	if err := dw.w.WriteByte(DocsVersion); err != nil {
 		return nil, err
 	}
-	
+
 	return dw, nil
 }
 
 func (w *DocWriter) Write(rec models.DocumentRecord) error {
-	// Custom binary format:
-	// Record:
-	//   DocID (4)
-	//   Type (1)
-	//   PathLen (2)
-	//   Path (PathLen)
-	//   TimestampMin (8)
-	//   TimestampMax (8)
-
+	// calculate size needed for buffer
 	buf := make([]byte, 4+1+2+len(rec.Path)+8+8)
 	offset := 0
 
+	// put the id first
 	binary.LittleEndian.PutUint32(buf[offset:], rec.DocID)
 	offset += 4
 
 	buf[offset] = byte(rec.Type)
 	offset += 1
 
+	// store path len then the path string
 	binary.LittleEndian.PutUint16(buf[offset:], uint16(len(rec.Path)))
 	offset += 2
 
 	copy(buf[offset:], rec.Path)
 	offset += len(rec.Path)
 
+	// save timestamps for time filtering later
 	binary.LittleEndian.PutUint64(buf[offset:], uint64(rec.TimestampMin))
 	offset += 8
 
@@ -74,13 +69,14 @@ func (w *DocWriter) Write(rec models.DocumentRecord) error {
 }
 
 func (w *DocWriter) Close() error {
+	// make sure we flush everything before closing
 	if err := w.w.Flush(); err != nil {
 		return err
 	}
 	return w.file.Close()
 }
 
-// DocReader handles reading from docs.bin
+// reads docs back from disk
 type DocReader struct {
 	file *os.File
 	r    *bufio.Reader
@@ -93,10 +89,10 @@ func NewDocReader(path string) (*DocReader, error) {
 	}
 	dr := &DocReader{file: f, r: bufio.NewReader(f)}
 
-	// Verify Header
+	// check if header match content
 	header := make([]byte, len(DocsHeader))
 	if _, err := io.ReadFull(dr.r, header); err != nil {
-		return nil, fmt.Errorf("bad header: %v", err)
+		return nil, fmt.Errorf("bad headers: %v", err)
 	}
 	if string(header) != DocsHeader {
 		return nil, fmt.Errorf("invalid header: expected %s, got %s", DocsHeader, string(header))
@@ -112,43 +108,39 @@ func NewDocReader(path string) (*DocReader, error) {
 	return dr, nil
 }
 
-// ReadNext reads the next document record. Returns io.EOF if done.
 func (r *DocReader) ReadNext() (models.DocumentRecord, error) {
 	var rec models.DocumentRecord
 
-	// DocID
+	// read doc id
 	var docID uint32
 	if err := binary.Read(r.r, binary.LittleEndian, &docID); err != nil {
 		return rec, err
 	}
 	rec.DocID = docID
 
-	// Type
 	t, err := r.r.ReadByte()
 	if err != nil {
 		return rec, err
 	}
 	rec.Type = models.DocType(t)
 
-	// PathLen
+	// read len of path
 	var pathLen uint16
 	if err := binary.Read(r.r, binary.LittleEndian, &pathLen); err != nil {
 		return rec, err
 	}
 
-	// Path
 	pathBuf := make([]byte, pathLen)
 	if _, err := io.ReadFull(r.r, pathBuf); err != nil {
 		return rec, err
 	}
 	rec.Path = string(pathBuf)
 
-	// TimestampMin
+	// get the timestamps
 	if err := binary.Read(r.r, binary.LittleEndian, &rec.TimestampMin); err != nil {
 		return rec, err
 	}
 
-	// TimestampMax
 	if err := binary.Read(r.r, binary.LittleEndian, &rec.TimestampMax); err != nil {
 		return rec, err
 	}
