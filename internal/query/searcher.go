@@ -165,8 +165,8 @@ func processPostings(postings []models.Posting, docs map[uint32]models.DocumentR
 	}
 }
 
+// Brain of our Phrase Matching Algo
 func matchPhraseDocs(postingsList [][]models.Posting) map[uint32]uint32 {
-	// Start with docIDs from the first word
 	candidates := make(map[uint32][]uint32) // docID -> positions of match chain
 
 	firstList := postingsList[0]
@@ -174,23 +174,22 @@ func matchPhraseDocs(postingsList [][]models.Posting) map[uint32]uint32 {
 		candidates[p.DocID] = p.Positions
 	}
 
-	// Intersect with subsequent words
+	// Intersect
 	for i := 1; i < len(postingsList); i++ {
 		nextCandidates := make(map[uint32][]uint32)
 		currentWordPostings := postingsList[i]
 
 		for _, p := range currentWordPostings {
-			// check if this doc was in previous candidates
-			prevPositions, ok := candidates[p.DocID]
+			prevPositions, ok := candidates[p.DocID] // checks if docID is in candidates
 			if !ok {
 				continue
 			}
 
-			// check positional adjacency
+			// checking adjacency
 			var validNewPositions []uint32
 			for _, prevPos := range prevPositions {
 				for _, currPos := range p.Positions {
-					// we now use token indices, so strict adjacency is +1
+					//we use token indices to check adjacency strictly +1
 					if prevPos+1 == currPos {
 						validNewPositions = append(validNewPositions, currPos)
 					}
