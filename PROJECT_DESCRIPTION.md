@@ -196,12 +196,10 @@ We prototyped the logic in Python before building the production Go engine. Benc
 
 | Implementation | Indexing Time |
 |----------------|---------------|
-| Python Prototype | ~50ms |
-| DevScope (Go) | ~4.4ms |
+| Python Prototype | ~100ms |
+| DevScope (Go) | ~36ms |
 
-**Result**: The Go implementation achieved **~10x speedup** thanks to static typing, compiled binaries, and low-level binary I/O.
-
----
+**Result**: The Go implementation achieved **~3x speedup** thanks to static typing, compiled binaries, and low-level binary I/O.
 
 ## Technology Choices
 
