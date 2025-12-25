@@ -61,10 +61,10 @@ DevScope operates in two main stages:
 
 To validate the architecture, I prototyped the logic in Python (`pythonproto.py`) before building the high-performance Go engine.
 Running indexing on the `test_data` dataset (10 files):
-*   **Python Prototype**: `~50ms`
-*   **DevScope (Go)**: `~4.4ms`
+*   **Python Prototype**: `~100ms`
+*   **DevScope (Go)**: `~36ms`
 
-**Result**: The Go implementation is **~10x faster** due to static typing and low-level binary I/O.
+**Result**: The Go implementation is **~3x faster** due to static typing and low-level binary I/O.
 
 ## 📦 Installation & Usage
 
