@@ -18,7 +18,7 @@ type SearchResult struct {
 	MatchCount uint32
 }
 
-// main search function that coordinates everything
+// Our main search function coordinates everything
 func Search(idx *IndexReader, queryString string) ([]SearchResult, error) {
 	terms, phrases, levelFilter, extFilter := parseQuery(queryString)
 
@@ -81,7 +81,7 @@ func Search(idx *IndexReader, queryString string) ([]SearchResult, error) {
 				continue
 			}
 
-			// use actual phrase count for scoring
+			// we use actual phrase count for scoring
 			tf := float64(count)
 			score := tf * phraseIdf * 2.0 // bonus for phrase
 

@@ -73,7 +73,7 @@ func (b *IndexBuilder) Build(root string) error {
 			b.addToken(tok, doc.DocID)
 		}
 
-		// ALSO index the filename itself for the +5.0 bonus!
+		// ALSO we index the filename itself for the +5.0 bonus!
 		baseName := filepath.Base(doc.Path)
 		// remove extension for cleaner tokens? "main.cpp" -> "main", "cpp"
 		// simple regex find all works nicely

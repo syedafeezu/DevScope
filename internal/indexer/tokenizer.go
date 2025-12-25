@@ -38,6 +38,7 @@ var (
 	reFuncDef    = regexp.MustCompile(`(func|def|function|class|struct)\s+([a-zA-Z_][a-zA-Z0-9_]*)`)
 )
 
+// We Tokenize code files here
 func tokenizeCode(reader io.Reader) []RawToken {
 	scanner := bufio.NewScanner(reader)
 	var tokens []RawToken
@@ -71,6 +72,7 @@ func tokenizeCode(reader io.Reader) []RawToken {
 	return tokens
 }
 
+// We Tokenize Log files here
 func tokenizeLog(reader io.Reader) ([]RawToken, int64, int64) {
 	scanner := bufio.NewScanner(reader)
 	var tokens []RawToken
