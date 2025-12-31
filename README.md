@@ -102,3 +102,64 @@ go build ./cmd/devscope
 
 ## 🤝 Contributing
 Built for the Rootsprout's Build from Scratch Hackathon. Focuses on understanding core search engine mechanics without reliance on external indexing libraries.
+---
+
+## 🏆 Hackathon Recognition
+
+**DevScope** was awarded **🥇 1st Place — Build From Scratch Champion** at the  
+**Rootsprouts “Build From Scratch” Hackathon**.
+
+This recognition was awarded for:
+- Building a complete search engine **entirely from first principles**
+- Designing **custom binary index formats**
+- Implementing an **inverted index, query engine, and ranking logic** without external search libraries
+- Demonstrating strong understanding of **systems design and low-level performance tradeoffs**
+
+As part of the win, DevScope is being showcased on the official Rootsprouts GitHub organization to help other developers learn from its architecture and implementation.
+
+---
+
+## 🎯 Project Intent
+
+DevScope was built with a single goal:
+
+> **To deeply understand how real-world search engines work — not by using libraries, but by building every layer manually.**
+
+Unlike production search engines that abstract away internals, DevScope intentionally exposes:
+- Disk layouts
+- Index structures
+- Query parsing logic
+- Ranking decisions
+
+This makes it a **learning-first systems project**, optimized for clarity, performance, and architectural correctness.
+
+---
+
+## 👤 Credits & Authorship
+
+**Original Creator & Author:**  
+**Syed Afeezu Raheman & Annapoorani Lakshmanan**
+
+All core architecture, indexing logic, query execution, and binary formats were designed and implemented by the original authors as part of the Rootsprouts Build From Scratch Hackathon.
+
+GitHub commit history permanently reflects authorship and contribution ownership.
+
+---
+
+## 🧠 What This Project Demonstrates
+
+- Low-level systems thinking
+- Search engine fundamentals (inverted indexes, TF-IDF, positional queries)
+- Binary file design & disk-efficient data layouts
+- Performance-oriented Go programming
+- Ability to design, prototype, benchmark, and ship a non-trivial system independently
+
+---
+
+## 📌 Notes
+
+- This project prioritizes **learning and correctness** over production hardening.
+- No external indexing or search libraries (e.g., Lucene, ElasticSearch) were used.
+- Future extensions may include compression, incremental indexing, and distributed search experiments.
+
+---
